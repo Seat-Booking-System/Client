@@ -406,10 +406,18 @@ const Booking = () => {
             </button>
           </div>
           <div className="w-full flex flex-col gap-2 items-center mt-10">
-            <Link to={""}className="text-white font-extralight hover:cursor-pointer hover:text-white/80 transition-all duration-200">
+            <Link
+              to={"https://github.com/orgs/Seat-Booking-System/repositories"}
+              target="_blank"
+              className="text-white font-extralight hover:cursor-pointer hover:text-white/80 transition-all duration-200"
+            >
               Source Code
             </Link>
-            <Link className="text-white font-extralight hover:cursor-pointer hover:text-white/80 transition-all duration-200">
+            <Link
+              to={"https://www.adidecodes.com"}
+              target="_blank"
+              className="text-white font-extralight hover:cursor-pointer hover:text-white/80 transition-all duration-200"
+            >
               Made with ❤️ by Aditya
             </Link>
           </div>
