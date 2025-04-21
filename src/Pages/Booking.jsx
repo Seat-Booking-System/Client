@@ -236,6 +236,7 @@ const Booking = () => {
           className="text-red-400 text-xl cursor-pointer"
           onClick={() => {
             cookie.remove("token");
+            cookie.remove("name");
             showToast("Logged out successfully", "success");
             navigate("/auth");
           }}
