@@ -89,14 +89,13 @@ const Booking = () => {
     const seatsPerRow = 7;
     const grid = [];
 
-    // 1) Build the grid of seats (12 rows; last row only has 3 seats)
     for (let row = 0; row < totalRows; row++) {
       const start = row * seatsPerRow;
       const end = start + (row === totalRows - 1 ? 3 : seatsPerRow);
       grid[row] = seatMap.slice(start, end);
     }
 
-    // 2) Special‑case for selecting exactly 1 seat: pick the first free one left‑to‑right, top‑to‑bottom
+    // Special case: 1 seat
     if (count === 1) {
       for (let row = 0; row < totalRows; row++) {
         for (const seat of grid[row]) {
@@ -108,40 +107,32 @@ const Booking = () => {
       throw new Error("Not enough available seats");
     }
 
-    // 3) Build a per‑row list of free seats
-    const rowsAvail = [];
+    // Try to find contiguous seats in closest row
     for (let row = 0; row < totalRows; row++) {
-      const freeSeats = grid[row].filter((s) => !s.isbooked);
-      if (freeSeats.length) {
-        rowsAvail.push({ row, seats: freeSeats });
+      const seats = grid[row];
+      let run = [];
+
+      for (let i = 0; i < seats.length; i++) {
+        if (!seats[i].isbooked) {
+          run.push(seats[i]);
+          if (run.length === count) {
+            return run.map((s) => s.seatnumber);
+          }
+        } else {
+          run = [];
+        }
       }
     }
 
-    // 4) Sort rows by number of free seats, then by row number
-    rowsAvail.sort((a, b) => {
-      if (b.seats.length !== a.seats.length)
-        return b.seats.length - a.seats.length;
-      return a.row - b.row;
-    });
-
-    // 5) Can we fit all `count` into a single row?
-    for (const { seats } of rowsAvail) {
-      if (seats.length >= count) {
-        // take the first `count` seats in left→right order
-        return seats.slice(0, count).map((s) => s.seatnumber);
-      }
-    }
-
-    // 6) Otherwise, we’ll spill over row→row, but always finish any
-    //    partially used row before moving on.
+    // If we can't find contiguous, then pick closest rows and fill them
     let remaining = count;
     const picked = [];
 
-    for (const { seats } of rowsAvail) {
+    for (let row = 0; row < totalRows; row++) {
       if (remaining === 0) break;
-      // take as many as you need from this row
-      const take = Math.min(remaining, seats.length);
-      picked.push(...seats.slice(0, take));
+      const freeSeats = grid[row].filter((s) => !s.isbooked);
+      const take = Math.min(remaining, freeSeats.length);
+      picked.push(...freeSeats.slice(0, take));
       remaining -= take;
     }
 
@@ -149,7 +140,6 @@ const Booking = () => {
       throw new Error("Not enough available seats");
     }
 
-    // Return in ascending order
     return picked.map((s) => s.seatnumber).sort((a, b) => a - b);
   }
 
