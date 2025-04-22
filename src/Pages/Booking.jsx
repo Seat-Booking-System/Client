@@ -85,90 +85,80 @@ const Booking = () => {
   function getAvailableSeatsToBook(seatMap, count) {
     if (count > 7) throw new Error("Cannot book more than 7 seats");
 
-    const availableSeats = seatMap.filter((seat) => !seat.isbooked);
-    if (availableSeats.length < count) {
+    const totalRows = 12;
+    const seatsPerRow = 7;
+    const grid = [];
+
+    // 1) Build the grid of seats (12 rows; last row only has 3 seats)
+    for (let row = 0; row < totalRows; row++) {
+      const start = row * seatsPerRow;
+      const end = start + (row === totalRows - 1 ? 3 : seatsPerRow);
+      grid[row] = seatMap.slice(start, end);
+    }
+
+    // 2) Special‑case for selecting exactly 1 seat: pick the first free one left‑to‑right, top‑to‑bottom
+    if (count === 1) {
+      for (let row = 0; row < totalRows; row++) {
+        for (const seat of grid[row]) {
+          if (!seat.isbooked) {
+            return [seat.seatnumber];
+          }
+        }
+      }
       throw new Error("Not enough available seats");
     }
 
-    const grid = [];
-    for (let i = 0; i < 12; i++) {
-      const rowSeats = seatMap.slice(i * 7, i * 7 + (i === 11 ? 3 : 7));
-      grid.push(rowSeats);
-    }
-
-    for (let row = 0; row < grid.length; row++) {
-      const rowSeats = grid[row];
-      let block = [];
-      for (let i = 0; i < rowSeats.length; i++) {
-        if (!rowSeats[i].isbooked) {
-          block.push(rowSeats[i].seatnumber);
-          if (block.length === count) return block;
-        } else {
-          block = [];
-        }
+    // 3) Build a per‑row list of free seats
+    const rowsAvail = [];
+    for (let row = 0; row < totalRows; row++) {
+      const freeSeats = grid[row].filter((s) => !s.isbooked);
+      if (freeSeats.length) {
+        rowsAvail.push({ row, seats: freeSeats });
       }
     }
 
-    const clusters = [];
-    const visited = new Set();
-
-    for (let row = 0; row < grid.length; row++) {
-      for (let col = 0; col < grid[row].length; col++) {
-        const seat = grid[row][col];
-        if (!seat || seat.isbooked) continue;
-        const id = `${row}-${col}`;
-        if (visited.has(id)) continue;
-
-        const queue = [[row, col]];
-        const cluster = [];
-
-        while (queue.length > 0) {
-          const [r, c] = queue.shift();
-          const seat = grid[r]?.[c];
-          if (!seat || seat.isbooked) continue;
-          const sid = `${r}-${c}`;
-          if (visited.has(sid)) continue;
-
-          visited.add(sid);
-          cluster.push(seat);
-
-          queue.push([r - 1, c]);
-          queue.push([r + 1, c]);
-          queue.push([r, c - 1]);
-          queue.push([r, c + 1]);
-        }
-
-        if (cluster.length >= count) {
-          clusters.push(cluster);
-        }
-      }
-    }
-
-    clusters.sort((a, b) => {
-      const rowsA = new Set(a.map((s) => Math.floor((s.seatnumber - 1) / 7)));
-      const rowsB = new Set(b.map((s) => Math.floor((s.seatnumber - 1) / 7)));
-      const minRowA = Math.min(...rowsA);
-      const minRowB = Math.min(...rowsB);
-
-      if (rowsA.size !== rowsB.size) return rowsA.size - rowsB.size;
-      return minRowA - minRowB;
+    // 4) Sort rows by number of free seats, then by row number
+    rowsAvail.sort((a, b) => {
+      if (b.seats.length !== a.seats.length)
+        return b.seats.length - a.seats.length;
+      return a.row - b.row;
     });
 
-    for (const cluster of clusters) {
-      cluster.sort((a, b) => a.seatnumber - b.seatnumber);
-      for (let i = 0; i <= cluster.length - count; i++) {
-        const group = cluster.slice(i, i + count);
-        const rows = new Set(
-          group.map((s) => Math.floor((s.seatnumber - 1) / 7))
-        );
-        if (rows.size <= 2) {
-          return group.map((s) => s.seatnumber);
-        }
+    // 5) Can we fit all `count` into a single row?
+    for (const { seats } of rowsAvail) {
+      if (seats.length >= count) {
+        // take the first `count` seats in left→right order
+        return seats.slice(0, count).map((s) => s.seatnumber);
       }
     }
 
-    return availableSeats.slice(0, count).map((s) => s.seatnumber);
+    // 6) Otherwise, we’ll spill over row→row, but always finish any
+    //    partially used row before moving on.
+    let remaining = count;
+    const picked = [];
+
+    for (const { seats } of rowsAvail) {
+      if (remaining === 0) break;
+      // take as many as you need from this row
+      const take = Math.min(remaining, seats.length);
+      picked.push(...seats.slice(0, take));
+      remaining -= take;
+    }
+
+    if (remaining > 0) {
+      throw new Error("Not enough available seats");
+    }
+
+    // Return in ascending order
+    return picked.map((s) => s.seatnumber).sort((a, b) => a - b);
   }
+
+  const handleTokenExpired = () => {
+    cookie.remove("token");
+    cookie.remove("name");
+    showToast("Session Expired, Please login again", "error");
+    navigate("/auth");
+  };
 
   const handleBook = async () => {
     if (!cookie.get("token")) {
@@ -217,6 +207,10 @@ const Booking = () => {
         }));
       } catch (error) {
         console.error(error);
+        if (error.response.data.error == "Token expired") {
+          handleTokenExpired();
+          return;
+        }
         showToast("Something went wrong", "error");
         return;
       }
@@ -291,9 +285,7 @@ const Booking = () => {
     } catch (error) {
       console.error(error);
       if (error.response.data.error == "Token expired") {
-        cookie.remove("token");
-        showToast("Token Expired, Please login again", "error");
-        navigate("/auth");
+        handleTokenExpired();
         return;
       }
       showToast("Something went wrong", "error");
